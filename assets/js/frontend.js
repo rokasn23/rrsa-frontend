@@ -22,15 +22,7 @@ jQuery(function($){
         $.ajax({
             url: SCFrontend.ajaxurl,
             type: 'POST',
-            data: {
-                action: 'sc_create_event',
-                title: $('input[name="title"]').val(),
-                description: $('textarea[name="description"]').val(),
-                date: $('input[name="date"]').val(),
-                start_time: $('input[name="start_time"]').val(),
-                end_time: $('input[name="end_time"]').val(),
-                category: $('input[name="category"]').val()
-            },
+            data: $(this).serialize() + '&action=sc_create_event',
             success: function(response){
                 if(response.success){
                     $('#sc-response').html('<p>Event Created</p>');

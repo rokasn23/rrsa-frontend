@@ -2,9 +2,13 @@
 /*
 Plugin Name: RRA Sugar Calendar Frontend
 Description: Adds a shortcode to add an event to Sugar Calendar events from frontend
-Version: 1.1.0
+Version: 1.2.0
 Author: RN
 */
+
+
+// TODO make this plugin check if sugar calendar lite exists (database table wp_sc_events exists)
+// and write proper comments
 
 if (!defined('ABSPATH')) exit;
 
@@ -37,7 +41,38 @@ class SC_Frontend_Event_Plugin {
         ]);
     }
 
+    private function get_filtered_categories() {
+        // this is to make unwanted categories not show up
+        $terms = get_terms([
+            'taxonomy' => 'sc_event_category',
+            'hide_empty' => false
+        ]);
+
+        $exclude = [];
+
+        $json_path = plugin_dir_path(__FILE__) . 'config/category-filter.json';
+
+        if (file_exists($json_path)) {
+            $json = json_decode(file_get_contents($json_path), true);
+            if (!empty($json['exclude'])) {
+                $exclude = $json['exclude'];
+            }
+        }
+
+        $filtered = [];
+
+        foreach ($terms as $term) {
+            if (!in_array($term->name, $exclude)) {
+                $filtered[] = $term;
+            }
+        }
+        return $filtered;
+    }
+ 
     public function render_button() {
+        // this makes a shortcode that creates a button for an input form
+        $categories = $this->get_filtered_categories();
+
         ob_start();
         ?>
 
@@ -63,9 +98,17 @@ class SC_Frontend_Event_Plugin {
                     <label>End Time</label>
                     <input type="time" name="end_time" required>
 
-                    <label>Category ID</label>
-                    <input type="number" name="category" placeholder="Category ID">
+                    <label>Category</label>
+                    <select name="category" required>
+                        <option value="">Select category</option>
 
+                        <?php foreach ($categories as $cat): ?>
+                            <option value="<?php echo esc_attr($cat->term_id); ?>">
+                                <?php echo esc_html($cat->name); ?>
+                            </option>
+                        <?php endforeach; ?>
+
+                    </select>
                     <button type="submit">Create Event</button>
                 </form>
 
@@ -79,39 +122,84 @@ class SC_Frontend_Event_Plugin {
 
     public function create_event() {
 
-        $title = sanitize_text_field($_POST['title']);
-        $description = sanitize_textarea_field($_POST['description']);
-        $date = $_POST['date'];
-        $start = $_POST['start_time'];
-        $end = $_POST['end_time'];
-        $category = intval($_POST['category']);
+        $title       = isset($_POST['title']) ? sanitize_text_field($_POST['title']) : '';
+        $content     = isset($_POST['description']) ? wp_kses_post($_POST['description']) : '';
+        $date        = isset($_POST['date']) ? sanitize_text_field($_POST['date']) : '';
+        $start_time  = isset($_POST['start_time']) ? sanitize_text_field($_POST['start_time']) : '';
+        $end_time    = isset($_POST['end_time']) ? sanitize_text_field($_POST['end_time']) : '';
+        $calendar_id = isset($_POST['category']) ? intval($_POST['category']) : 0;
 
-        $start_datetime = strtotime($date . ' ' . $start);
-        $end_datetime   = strtotime($date . ' ' . $end);
+        if (!$title || !$date || !$start_time || !$end_time || !$calendar_id) {
+            return false;
+        }
+        //TODO check if this can be remade
+        // builds datetime strings (Sugar Calendar Lite stores timestamps)
+        $start_datetime = strtotime($date . ' ' . $start_time);
+        $end_datetime   = strtotime($date . ' ' . $end_time);
 
-        $event_data = [
+        // 1. we create event as normal wp post
+        // 2. then connect taxonomy (assigns calendar)
+        // 3. then insert event to sugar calendar events db (easier than untangling internal functions which did not cooperate)
+        // 1.
+        $event_id = wp_insert_post( [
             'post_title'   => $title,
-            'post_content' => $description,
+            'post_content' => $content,
             'post_status'  => 'publish',
-            'post_type'    => 'sc_event'
-        ];
+            'post_type'    => 'sc_event',
+        ] );
 
-        $event_id = wp_insert_post($event_data);
-
-        if (!$event_id) {
+        if ( is_wp_error( $event_id ) || ! $event_id ) {
             wp_send_json_error('Event creation failed');
+            return false;
         }
-
-        // Sugar Calendar meta
-        update_post_meta($event_id, 'start', $start_datetime);
-        update_post_meta($event_id, 'end', $end_datetime);
-        update_post_meta($event_id, 'all_day', 0);
-
-        if ($category) {
-            wp_set_object_terms($event_id, [$category], 'sc_event_category');
+        // 2.
+        if ( ! empty( $calendar_id ) ) {
+            wp_set_object_terms(
+                $event_id,
+                (int) $calendar_id,
+                'sc_event_category'
+            );
         }
+        // 3.
+        $start_dt = date( 'Y-m-d H:i:s', $start_datetime );
+        $end_dt   = date( 'Y-m-d H:i:s', $end_datetime );
+
+        global $wpdb;
+
+        $wpdb->insert(
+            $wpdb->prefix . 'sc_events',
+            [
+                'object_id'   => $event_id,
+                'object_type' => 'post',
+                'object_subtype' => 'sc_event',
+                'title'       => $title,
+                'content'     => $content,
+                'status'      => 'publish',
+                'start'       => $start_dt,
+                'end'         => $end_dt,
+                'all_day'     => 0,
+                'date_created'  => current_time( 'mysql' ),
+                'date_modified' => current_time( 'mysql' ),
+                'uuid'        => "urn:uuid:" . strval(wp_generate_uuid4()),
+            ],
+            [
+                '%d', // object_id
+                '%s', // object_type
+                '%s', // object_subtype
+                '%s', // title
+                '%s', // content
+                '%s', // status
+                '%s', // start
+                '%s', // end
+                '%d', // all_day
+                '%s', // date_created
+                '%s', // date_modified
+                '%s', // uuid
+            ]
+        );
 
         wp_send_json_success('Event created');
+        //TODO force page reload
     }
 }
 
