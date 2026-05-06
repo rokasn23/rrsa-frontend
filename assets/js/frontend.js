@@ -27,6 +27,7 @@ jQuery(function($){
                 if(response.success){
                     $('#sc-response').html('<p>Event Created</p>');
                     $('#sc-event-form')[0].reset();
+                    location.reload(true);
                 }else{
                     $('#sc-response').html('<p>Error creating event</p>');
                 }

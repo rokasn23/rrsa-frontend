@@ -199,7 +199,6 @@ class RRSA_SC_Frontend_Event_Plugin {
         );
 
         wp_send_json_success('Event created');
-        header("Refresh:0");
     }
 }
 
