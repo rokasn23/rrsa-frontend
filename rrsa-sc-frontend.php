@@ -1,6 +1,6 @@
 <?php
 /*
-Plugin Name: RRA Sugar Calendar Frontend
+Plugin Name: RRSA Sugar Calendar Frontend
 Description: Adds a shortcode to add an event to Sugar Calendar events from frontend
 Version: 1.2.0
 Author: RN
@@ -12,10 +12,10 @@ Author: RN
 
 if (!defined('ABSPATH')) exit;
 
-class SC_Frontend_Event_Plugin {
+class RRSA_SC_Frontend_Event_Plugin {
 
     public function __construct() {
-        add_shortcode('sc_add_event', [$this, 'render_button']);
+        add_shortcode('rrsa_sc_add_event', [$this, 'render_button']);
         add_action('wp_enqueue_scripts', [$this, 'enqueue_assets']);
 
         add_action('wp_ajax_sc_create_event', [$this, 'create_event']);
@@ -199,8 +199,8 @@ class SC_Frontend_Event_Plugin {
         );
 
         wp_send_json_success('Event created');
-        //TODO force page reload
+        header("Refresh:0");
     }
 }
 
-new SC_Frontend_Event_Plugin();
+new RRSA_SC_Frontend_Event_Plugin();
