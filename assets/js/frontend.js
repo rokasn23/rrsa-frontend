@@ -20,13 +20,17 @@ jQuery(function($){
         e.preventDefault();
 
         $.ajax({
-            url: SCFrontend.ajaxurl,
+            url: RRSAFrontend.ajaxurl,
             type: 'POST',
             data: $(this).serialize() + '&action=rrsa_create_event',
             success: function(response){
                 if(response.success){
                     $('#rrsa-response').html('<p>Event Created</p>');
                     $('#rrsa-event-form')[0].reset();
+                    setTimeout(function(){
+                        modal.fadeOut(200);
+                        $('#rrsa-response').html('');
+                    }, 500);
                     location.reload(true);
                 }else{
                     $('#rrsa-response').html('<p>Error creating event</p>');

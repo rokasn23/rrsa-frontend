@@ -1,16 +1,14 @@
 <?php
 /*
-Plugin Name: RRSA Sugar Calendar Frontend
-Description: Adds a shortcode to add an event to Sugar Calendar events from frontend
+Plugin Name: RRSA frontend for My Calendar (by Joe Dolson) plugin
+Description: Adds a shortcode to add an event to My Calendar events from frontend
 Version: 1.2.0
 Author: RN
 */
 
 
-// TODO make this plugin check if sugar calendar lite exists (database table wp_sc_events exists)
+// TODO make this plugin check if my calendar exists (database table wp_my_calendar_events exists)
 // and write proper comments
-
-
 
 if (!defined('ABSPATH')) exit;
 
@@ -46,7 +44,7 @@ class RRSA_Frontend_Event_Plugin {
     private function get_filtered_categories() {
         // this is to make unwanted categories not show up
         $terms = get_terms([
-            'taxonomy' => 'sc_event_category',
+            'taxonomy' => 'mc-event-category',
             'hide_empty' => false
         ]);
 
@@ -70,7 +68,7 @@ class RRSA_Frontend_Event_Plugin {
         }
         return $filtered;
     }
- 
+
     public function render_button() {
         // this makes a shortcode that creates a button for an input form
         $categories = $this->get_filtered_categories();
@@ -122,85 +120,88 @@ class RRSA_Frontend_Event_Plugin {
         return ob_get_clean();
     }
 
+    // this entire function has a problem that it doesnt update calendars that you can view in website, 
+    // to see changes you must refresh events tab in admin panel
     public function create_event() {
+
+        if ( ! function_exists( 'my_calendar_save' ) ) {
+            return new WP_Error( 'my_calendar_missing', 'My Calendar plugin is not active.' );
+        }
 
         $title       = isset($_POST['title']) ? sanitize_text_field($_POST['title']) : '';
         $content     = isset($_POST['description']) ? wp_kses_post($_POST['description']) : '';
         $date        = isset($_POST['date']) ? sanitize_text_field($_POST['date']) : '';
         $start_time  = isset($_POST['start_time']) ? sanitize_text_field($_POST['start_time']) : '';
         $end_time    = isset($_POST['end_time']) ? sanitize_text_field($_POST['end_time']) : '';
-        $calendar_id = isset($_POST['category']) ? intval($_POST['category']) : 0;
+        $calendar_id = isset($_POST['category']) ? intval($_POST['category']) : 1;
 
         if (!$title || !$date || !$start_time || !$end_time || !$calendar_id) {
             return false;
         }
-        //TODO check if this can be remade
-        // builds datetime strings (Sugar Calendar Lite stores timestamps)
-        $start_datetime = strtotime($date . ' ' . $start_time);
-        $end_datetime   = strtotime($date . ' ' . $end_time);
-
-        // 1. we create event as normal wp post
-        // 2. then connect taxonomy (assigns calendar)
-        // 3. then insert event to sugar calendar events db (easier than untangling internal functions which did not cooperate)
-        // 1.
-        $event_id = wp_insert_post( [
-            'post_title'   => $title,
-            'post_content' => $content,
-            'post_status'  => 'publish',
-            'post_type'    => 'sc_event',
-        ] );
-
-        if ( is_wp_error( $event_id ) || ! $event_id ) {
-            wp_send_json_error('Event creation failed');
-            return false;
-        }
-        // 2.
-        if ( ! empty( $calendar_id ) ) {
-            wp_set_object_terms(
-                $event_id,
-                (int) $calendar_id,
-                'sc_event_category'
-            );
-        }
-        // 3.
-        $start_dt = date( 'Y-m-d H:i:s', $start_datetime );
-        $end_dt   = date( 'Y-m-d H:i:s', $end_datetime );
-
+        
         global $wpdb;
 
-        $wpdb->insert(
-            $wpdb->prefix . 'sc_events',
-            [
-                'object_id'   => $event_id,
-                'object_type' => 'post',
-                'object_subtype' => 'sc_event',
-                'title'       => $title,
-                'content'     => $content,
-                'status'      => 'publish',
-                'start'       => $start_dt,
-                'end'         => $end_dt,
-                'all_day'     => 0,
-                'date_created'  => current_time( 'mysql' ),
-                'date_modified' => current_time( 'mysql' ),
-                'uuid'        => "urn:uuid:" . strval(wp_generate_uuid4()),
-            ],
-            [
-                '%d', // object_id
-                '%s', // object_type
-                '%s', // object_subtype
-                '%s', // title
-                '%s', // content
-                '%s', // status
-                '%s', // start
-                '%s', // end
-                '%d', // all_day
-                '%s', // date_created
-                '%s', // date_modified
-                '%s', // uuid
-            ]
+        if($calendar_id !== 1) {
+            $wp_term_id = $calendar_id;
+        // this can be skipped and changed to WHERE category_term = %d
+        // but i didnt get enough time to test this
+        $term = get_term( $wp_term_id );
+
+        if ( ! $term || is_wp_error( $term ) ) {
+            return new WP_Error( 'invalid_term', 'Invalid taxonomy term.' );
+        }
+        //
+        $mc_category_id = $wpdb->get_var(
+            $wpdb->prepare(
+                "
+                SELECT category_id
+                FROM {$wpdb->prefix}my_calendar_categories
+                WHERE category_name = %s
+                LIMIT 1
+                ",
+                $term->name
+            )
         );
 
+        if ( ! $mc_category_id ) {
+            return new WP_Error( 'missing_mc_category', 'No matching My Calendar category found.' );
+        }
+
+        $calendar_id = $mc_category_id;
+        }
+        
+        $event = array(
+            'event_title'       => $title,
+            'event_desc'        => $content,
+            'event_begin'       => $date,
+            'event_end'         => $date,
+            'event_time'        => $start_time,
+            'event_endtime'     => $end_time,
+            'event_category'    => $calendar_id,
+
+            // to prevent invalid event
+            'event_recur'       => "S1",
+            'event_repeats'     => "",
+            'event_author'      => 1,
+            'event_host'        => 1,
+            'event_link'        => "",
+            'event_access'      => "",
+            'event_image'       => ""
+        );
+
+        /*
+        * my_calendar_save() expects:
+        * array($valid,
+        *   $event,
+        *   $raw_event,   <- can be $event in this situation
+        *   $message
+        * )
+        */
+        $data = array(true, $event, $event, '');
+        $result = my_calendar_save( 'add', $data );
+
         wp_send_json_success('Event created');
+
     }
 }
 
