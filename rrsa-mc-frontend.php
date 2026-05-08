@@ -1,8 +1,8 @@
 <?php
 /*
-Plugin Name: RRSA frontend for My Calendar (by Joe Dolson) plugin
-Description: Adds a shortcode to add an event to My Calendar events from frontend
-Version: 1.2.0
+Plugin Name: RRSA frontend
+Description: Adds a shortcode to add an event to My Calendar (by Joe Dolson) plugin trough website's frontend
+Version: 1.3.0
 Author: RN
 */
 
@@ -67,6 +67,19 @@ class RRSA_Frontend_Event_Plugin {
             }
         }
         return $filtered;
+    }
+
+    private function get_recipients() {
+        $json_path = plugin_dir_path(__FILE__) . 'config/email-recipient.json';
+
+        if (file_exists($json_path)) {
+            $json = json_decode(file_get_contents($json_path), true);
+            if (!empty($json['recipient'])) {
+                $recipients = $json['recipient'];
+            }
+        }
+
+        return $recipients;
     }
 
     public function render_button() {
@@ -141,33 +154,30 @@ class RRSA_Frontend_Event_Plugin {
         
         global $wpdb;
 
-        if($calendar_id !== 1) {
-            $wp_term_id = $calendar_id;
-        // this can be skipped and changed to WHERE category_term = %d
-        // but i didnt get enough time to test this
-        $term = get_term( $wp_term_id );
+        if($calendar_id != 1) {
+            $term = get_term($calendar_id);
 
-        if ( ! $term || is_wp_error( $term ) ) {
-            return new WP_Error( 'invalid_term', 'Invalid taxonomy term.' );
-        }
-        //
-        $mc_category_id = $wpdb->get_var(
-            $wpdb->prepare(
-                "
-                SELECT category_id
-                FROM {$wpdb->prefix}my_calendar_categories
-                WHERE category_name = %s
-                LIMIT 1
-                ",
-                $term->name
-            )
-        );
+            if ( ! $term || is_wp_error( $term ) ) {
+                return new WP_Error( 'invalid_term', 'Invalid taxonomy term.' );
+            }
+            
+            $mc_category_id = $wpdb->get_var(
+                $wpdb->prepare(
+                    "
+                    SELECT category_id
+                    FROM {$wpdb->prefix}my_calendar_categories
+                    WHERE category_name = %s
+                    LIMIT 1
+                    ",
+                    $term->name //reusing this
+                )
+            );
 
-        if ( ! $mc_category_id ) {
-            return new WP_Error( 'missing_mc_category', 'No matching My Calendar category found.' );
-        }
+            if ( ! $mc_category_id ) {
+                return new WP_Error( 'missing_mc_category', 'No matching My Calendar category found.' );
+            }
 
-        $calendar_id = $mc_category_id;
+            $calendar_id = $mc_category_id;
         }
         
         $event = array(
@@ -199,10 +209,45 @@ class RRSA_Frontend_Event_Plugin {
         */
         $data = array(true, $event, $event, '');
         $result = my_calendar_save( 'add', $data );
-
+        $this->send_email_after_adding_event($result["event_id"], $term->name);
+        
         wp_send_json_success('Event created');
 
     }
+    //sends a formatted email using
+    public function send_email_after_adding_event($event_id, $category){
+
+        $new_event_link = strval($_SERVER['HTTP_HOST']) . "/wp-admin/admin.php?page=my-calendar&mode=edit&event_id=" . strval($event_id);
+
+        // $to = $this->get_recipients();
+        $to = "example@example.com";
+        $subject = 'Įkeltas naujas įvykis į kalendorių';
+        $message = '
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+            </head>
+            <body>
+                <p>Įkeltas naujas įvykis į kalendorių: '. $category . '</p>
+
+                <p>
+                    <a href="'. $new_event_link . '" target="_blank">
+                        test2
+                    </a>
+                </p>
+
+                <p style="font-size: 8px;">
+                    '. current_datetime() .' 
+                </p>
+            </body>
+            </html>
+            ';
+        $headers = array('Content-Type: text/html; charset=UTF-8');
+
+        wp_mail( $to, $subject, $message, $headers );
+    }
 }
+    
 
 new RRSA_Frontend_Event_Plugin();
