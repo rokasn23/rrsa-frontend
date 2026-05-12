@@ -184,6 +184,9 @@ class RRSA_Frontend_Event_Plugin {
             'event_endtime'     => $end_time,
             'event_category'    => $calendar_id,
 
+            // makes an event be saved as draft instead of published
+            'event_approved'    => 0,
+
             // to prevent invalid event
             'event_recur'       => "S1",
             'event_repeats'     => "",
