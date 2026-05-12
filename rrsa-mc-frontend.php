@@ -4,6 +4,7 @@
  * Description:       Adds a shortcode to add an event to My Calendar plugin trough website's frontend
  * Version:           1.3.0
  * Author:            RN
+ * Plugin URI:        https://github.com/rokasn23/rrsa-frontend
  * License:           GNU General Public License v2 or later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Requires PHP:      7.4
