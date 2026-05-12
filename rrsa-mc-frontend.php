@@ -1,9 +1,13 @@
 <?php
-/*
-Plugin Name: RRSA frontend
-Description: Adds a shortcode to add an event to My Calendar (by Joe Dolson) plugin trough website's frontend
-Version: 1.3.0
-Author: RN
+/**
+ * Plugin Name:       RRSA frontend
+ * Description:       Adds a shortcode to add an event to My Calendar plugin trough website's frontend
+ * Version:           1.3.0
+ * Author:            RN
+ * License:           GNU General Public License v2 or later
+ * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
+ * Requires PHP:      7.4
+ * Requires at least: 6.9
 */
 
 
@@ -80,7 +84,6 @@ class RRSA_Frontend_Event_Plugin {
     }
 
     public function render_button() {
-        // this makes a shortcode that creates a button for an input form
         $categories = $this->get_filtered_categories();
 
         ob_start();
