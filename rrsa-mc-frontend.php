@@ -7,9 +7,6 @@ Author: RN
 */
 
 
-// TODO make this plugin check if my calendar exists (database table wp_my_calendar_events exists)
-// and write proper comments
-
 if (!defined('ABSPATH')) exit;
 
 class RRSA_Frontend_Event_Plugin {
@@ -106,10 +103,10 @@ class RRSA_Frontend_Event_Plugin {
                     <input type="date" name="date" required>
 
                     <label>Start Time</label>
-                    <input type="time" name="start_time" required>
+                    <input type="time" name="start_time" min="08:00" max="17:00" required>
 
                     <label>End Time</label>
-                    <input type="time" name="end_time" required>
+                    <input type="time" name="end_time" min="08:00" max="17:00" required>
 
                     <label>Category</label>
                     <select name="category" required>
@@ -133,8 +130,6 @@ class RRSA_Frontend_Event_Plugin {
         return ob_get_clean();
     }
 
-    // this entire function has a problem that it doesnt update calendars that you can view in website, 
-    // to see changes you must refresh events tab in admin panel
     public function create_event() {
 
         if ( ! function_exists( 'my_calendar_save' ) ) {
@@ -151,7 +146,7 @@ class RRSA_Frontend_Event_Plugin {
         if (!$title || !$date || !$start_time || !$end_time || !$calendar_id) {
             return false;
         }
-        
+
         global $wpdb;
 
         if($calendar_id != 1) {
@@ -169,7 +164,7 @@ class RRSA_Frontend_Event_Plugin {
                     WHERE category_name = %s
                     LIMIT 1
                     ",
-                    $term->name //reusing this
+                    $term->name
                 )
             );
 
@@ -199,14 +194,7 @@ class RRSA_Frontend_Event_Plugin {
             'event_image'       => ""
         );
 
-        /*
-        * my_calendar_save() expects:
-        * array($valid,
-        *   $event,
-        *   $raw_event,   <- can be $event in this situation
-        *   $message
-        * )
-        */
+
         $data = array(true, $event, $event, '');
         $result = my_calendar_save( 'add', $data );
         $this->send_email_after_adding_event($result["event_id"], $term->name);
@@ -214,13 +202,15 @@ class RRSA_Frontend_Event_Plugin {
         wp_send_json_success('Event created');
 
     }
-    //sends a formatted email using
+
     public function send_email_after_adding_event($event_id, $category){
-
-        $new_event_link = strval($_SERVER['HTTP_HOST']) . "/wp-admin/admin.php?page=my-calendar&mode=edit&event_id=" . strval($event_id);
-
-        // $to = $this->get_recipients();
-        $to = "example@example.com";
+        
+        $recipients = $this->get_recipients();
+        $new_event_link = "http://". strval($_SERVER['HTTP_HOST']) . "/wp-admin/admin.php?page=my-calendar&mode=edit&event_id=" . strval($event_id);
+        $date = new DateTime();
+        $dateString = $date->format('Y-m-d H:i:s');
+        
+        $to = $recipients[0];
         $subject = 'Įkeltas naujas įvykis į kalendorių';
         $message = '
             <!DOCTYPE html>
@@ -228,19 +218,19 @@ class RRSA_Frontend_Event_Plugin {
             <head>
                 <meta charset="UTF-8">
             </head>
-            <body>
+            <div>
                 <p>Įkeltas naujas įvykis į kalendorių: '. $category . '</p>
 
                 <p>
                     <a href="'. $new_event_link . '" target="_blank">
-                        test2
+                        Įvykio nuoroda
                     </a>
                 </p>
 
                 <p style="font-size: 8px;">
-                    '. current_datetime() .' 
+                    Automatiškai sukurtas laiškas. Į šį laišką neatsakyti. UTC time:'. $dateString .' 
                 </p>
-            </body>
+            </div>
             </html>
             ';
         $headers = array('Content-Type: text/html; charset=UTF-8');
